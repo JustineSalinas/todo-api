@@ -20,7 +20,7 @@ app.get("/", (req, res) => {
   res.json({
     name: "Task API",
     version: "1.0",
-    endpoints: ["/tasks", "/tasks/:id", "/health"],
+    endpoints: ["/tasks", "/tasks/:id", "/health", "/stats", "/reset"],
   });
 });
 
@@ -112,8 +112,33 @@ app.delete("/tasks/:id", (req, res) => {
   res.status(204).send();
 });
 
+// ---------- Extras ----------
+app.get("/stats", (req, res) => {
+  const total = tasks.length;
+  const done = tasks.filter((t) => t.done).length;
+  res.json({ total, done, open: total - done });
+});
+
+app.post("/reset", (req, res) => {
+  tasks = [
+    { id: 1, title: "Buy milk", done: false },
+    { id: 2, title: "Write README", done: false },
+    { id: 3, title: "Ship the API", done: true },
+  ];
+  nextId = 4;
+  res.json({ status: "reset", tasks });
+});
+
 // ---------- Stage 5: Swagger UI ----------
 app.use("/docs", swaggerUi.serve, swaggerUi.setup(openapiSpec));
+
+// ---------- Fallback for bad JSON bodies ----------
+app.use((err, req, res, next) => {
+  if (err.type === "entity.parse.failed") {
+    return res.status(400).json({ error: "invalid JSON body" });
+  }
+  next(err);
+});
 
 app.listen(PORT, () => {
   console.log(`Task API running at http://localhost:${PORT}`);
