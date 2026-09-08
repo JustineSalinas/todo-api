@@ -37,7 +37,13 @@ Server runs at `http://localhost:3000`. Swagger UI (interactive docs) is at
 ```
 $ curl -i -X POST http://localhost:3000/tasks -H "Content-Type: application/json" -d '{"title":"Buy milk"}'
 HTTP/1.1 201 Created
+X-Powered-By: Express
 Content-Type: application/json; charset=utf-8
+Content-Length: 40
+ETag: W/"28-PpSBYV7i68cXyGc7AhjVpkZkY5Q"
+Date: Tue, 08 Sep 2026 02:36:44 GMT
+Connection: keep-alive
+Keep-Alive: timeout=5
 
 {"id":4,"title":"Buy milk","done":false}
 ```
@@ -46,7 +52,9 @@ Content-Type: application/json; charset=utf-8
 
 ![Swagger UI screenshot](docs-screenshot.png)
 
-*(Replace this with your own screenshot of `/docs` showing the full CRUD cycle via "Try it out".)*
+Screenshot of `/docs` after running "Try it out" on `POST /tasks`: the request
+body, generated curl command, request URL, and the live `201 Created` response
+from the running server.
 
 ## The mortality experiment
 
