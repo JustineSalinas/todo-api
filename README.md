@@ -1,38 +1,39 @@
 # Task API
 
 A small CRUD API for managing a to-do list, built with Node.js + Express, backed
-by a real SQLite database.
+by a real Postgres database running in Docker.
 
 ## What this is
 
 Five core endpoints (Create, Read, Update, Delete) over a `tasks` table, plus a
 couple of optional extras (filtering, search, stats, reset). The API is exactly
-the same one from the in-memory version — only the storage layer changed.
+the same one from the original in-memory version — only the storage layer
+changed, twice now (SQLite, then Postgres).
 
-## Database
-
-- **Why SQLite:** no separate database server to install or run — it's a single
-  file, which is perfect for a small project like this. `better-sqlite3` gives a
-  simple synchronous API that's easy to reason about in an Express route handler.
-- **Where it lives:** `tasks.db` in the project root. It's git-ignored — running
-  the app is what creates it, not cloning the repo.
-- **Schema:** one `tasks` table (`id` integer primary key, `title` text, `done`
-  boolean), created automatically on first run. The three example tasks are
-  inserted only if the table is empty, so restarting the server never duplicates
-  them.
-
-## How to run it
+## Running the whole stack
 
 ```bash
-npm install
-npm start
+cp .env.example .env   # only needed the first time
+docker compose up
 ```
 
-The first run creates `tasks.db` and seeds it with 3 example tasks. Every run
-after that reuses the same file, so your data survives restarts.
+That starts Postgres (with a named volume, so data survives container
+restarts) and the app together. The app waits for Postgres to report healthy
+before it starts. Once it's up:
 
-Server runs at `http://localhost:3000`. Swagger UI (interactive docs) is at
-`http://localhost:3000/docs`.
+- API: `http://localhost:3000`
+- Swagger docs: `http://localhost:3000/docs`
+- Postgres is also published on `localhost:5432` if you want to connect a
+  GUI client directly.
+
+Stop everything with `docker compose down`. Add `-v` to also delete the
+volume (wipes the data) — leave it off to keep your tasks around.
+
+### Running the app outside Docker (optional)
+
+You can still run just the app with `npm start` against the containerized
+Postgres, as long as `docker compose up db` is running and `.env` points
+`DATABASE_URL` at `localhost:5432` (that's what `.env.example` already has).
 
 ## Endpoints
 
@@ -72,27 +73,46 @@ Screenshot of `/docs` after running "Try it out" on `POST /tasks`: the request
 body, generated curl command, request URL, and the live `201 Created` response
 from the running server.
 
-## The mortality experiment (Week 2)
+## Containerizing the stack (Week 3)
 
-The original version of this API kept tasks in a JavaScript array, so
-restarting the server wiped everything back to the 3 seed items. That
-limitation is what SQLite below fixes — data now lives in `tasks.db` on disk,
-not in process memory.
+The database moved again: SQLite → Postgres, running as its own container
+instead of a file next to the code.
 
-## Exploring the database directly
+- **Postgres in Docker:** `docker-compose.yml` runs `postgres:16-alpine` with
+  a named volume (`pgdata`) mounted at Postgres's data directory, so the
+  volume — not the container — is what actually holds the data. Deleting or
+  recreating the container leaves the volume, and the data, alone.
+- **Schema:** `db/init.sql` creates the `tasks` table and seeds the 3 example
+  rows. Postgres only runs files in `docker-entrypoint-initdb.d/` the first
+  time it starts against an empty volume, which is exactly the "insert seed
+  rows once" behavior this needs.
+- **Connection string:** the app reads `DATABASE_URL` from `.env` (via
+  `dotenv`). `.env` is gitignored; `.env.example` is committed so anyone
+  cloning the repo knows what to fill in. Inside `docker compose`, the app
+  container talks to Postgres by service name (`db`); running the app
+  directly on your machine, it's `localhost` instead — `.env.example` has
+  both cases covered.
+- **The repository swap, honestly:** the SQLite version (Week 2) had SQL
+  written directly inside the route handlers — there was no separate
+  storage layer to swap. This week introduces one:
+  [`repositories/postgresRepository.js`](repositories/postgresRepository.js)
+  is now the *only* file that knows SQL exists. `server.js` calls
+  `repository.listTasks()`, `repository.createTask()`, etc. and never sees a
+  query. That means the promise "swapping storage only changes one file"
+  is true starting from this commit, not before it — the routes changed
+  *this* time because the abstraction didn't exist yet, but a future swap
+  (back to SQLite, to an in-memory store for tests, whatever) would only
+  touch the repository file.
 
-Opening `tasks.db` in [DB Browser for SQLite](https://sqlitebrowser.org/) and
-running queries by hand shows changes reflected immediately through the API —
-no restart needed. `queries.sql` has the exact queries used for this.
+### Proving persistence across a restart
 
-![DB Browser for SQLite screenshot](db-viewer-screenshot.png)
+1. `docker compose up`
+2. Create a couple of tasks: `curl -X POST http://localhost:3000/tasks -H "Content-Type: application/json" -d '{"title":"Survive a restart"}'`
+3. `docker compose down` (without `-v`, so the volume stays)
+4. `docker compose up` again
+5. `curl http://localhost:3000/tasks` — the task created in step 2 is still there.
 
-Example query run directly against the database:
-
-```sql
-sqlite> SELECT * FROM tasks WHERE done = 1;
-3|Ship the API|1
-```
+<!-- Fill in with your actual output once you run the steps above. -->
 
 ## AI vs me (Stage 7, optional)
 
