@@ -1,12 +1,25 @@
 # Task API
 
-A small in-memory CRUD API for managing a to-do list, built with Node.js + Express.
+A small CRUD API for managing a to-do list, built with Node.js + Express, backed
+by a real SQLite database.
 
 ## What this is
 
-Five core endpoints (Create, Read, Update, Delete) over an in-memory list of tasks,
-plus a couple of optional extras (filtering, search, stats, reset). Data lives only
-in memory — restarting the server resets it to the seed tasks.
+Five core endpoints (Create, Read, Update, Delete) over a `tasks` table, plus a
+couple of optional extras (filtering, search, stats, reset). The API is exactly
+the same one from the in-memory version — only the storage layer changed.
+
+## Database
+
+- **Why SQLite:** no separate database server to install or run — it's a single
+  file, which is perfect for a small project like this. `better-sqlite3` gives a
+  simple synchronous API that's easy to reason about in an Express route handler.
+- **Where it lives:** `tasks.db` in the project root. It's git-ignored — running
+  the app is what creates it, not cloning the repo.
+- **Schema:** one `tasks` table (`id` integer primary key, `title` text, `done`
+  boolean), created automatically on first run. The three example tasks are
+  inserted only if the table is empty, so restarting the server never duplicates
+  them.
 
 ## How to run it
 
@@ -14,6 +27,9 @@ in memory — restarting the server resets it to the seed tasks.
 npm install
 npm start
 ```
+
+The first run creates `tasks.db` and seeds it with 3 example tasks. Every run
+after that reuses the same file, so your data survives restarts.
 
 Server runs at `http://localhost:3000`. Swagger UI (interactive docs) is at
 `http://localhost:3000/docs`.
@@ -56,12 +72,27 @@ Screenshot of `/docs` after running "Try it out" on `POST /tasks`: the request
 body, generated curl command, request URL, and the live `201 Created` response
 from the running server.
 
-## The mortality experiment
+## The mortality experiment (Week 2)
 
-Restarting the server resets `tasks` back to the 3 seed items — anything created,
-updated, or deleted during the previous run is gone. That's because the data lives
-only in a JavaScript array in the process's memory, not on disk or in a database.
-This is exactly why Week 3 introduces persistent storage.
+The original version of this API kept tasks in a JavaScript array, so
+restarting the server wiped everything back to the 3 seed items. That
+limitation is what SQLite below fixes — data now lives in `tasks.db` on disk,
+not in process memory.
+
+## Exploring the database directly
+
+Opening `tasks.db` in [DB Browser for SQLite](https://sqlitebrowser.org/) and
+running queries by hand shows changes reflected immediately through the API —
+no restart needed. `queries.sql` has the exact queries used for this.
+
+![DB Browser for SQLite screenshot](db-viewer-screenshot.png)
+
+Example query run directly against the database:
+
+```sql
+sqlite> SELECT * FROM tasks WHERE done = 1;
+3|Ship the API|1
+```
 
 ## AI vs me (Stage 7, optional)
 
