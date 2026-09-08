@@ -1,15 +1,20 @@
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./openapi.json");
-require("./db"); // creates tasks.db, the tasks table, and seeds it on first run
+const db = require("./db"); // creates tasks.db, the tasks table, and seeds it on first run
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
+// SQLite stores booleans as 0/1; convert on the way out.
+function toApiTask(row) {
+  return { id: row.id, title: row.title, done: !!row.done };
+}
+
 // ---------- In-memory "database" ----------
-// (Still used below; migrated to SQL route by route in the next commits.)
+// (Create/Update/Delete still use this array for now; migrated next.)
 let tasks = [
   { id: 1, title: "Buy milk", done: false },
   { id: 2, title: "Write README", done: false },
@@ -32,37 +37,42 @@ app.get("/health", (req, res) => {
 
 // ---------- Stage 2: Read ----------
 app.get("/tasks", (req, res) => {
-  let result = tasks;
+  let sql = "SELECT * FROM tasks WHERE 1 = 1";
+  const params = [];
 
   // extra: filter by done=true/false
   if (req.query.done !== undefined) {
-    const wantDone = req.query.done === "true";
-    result = result.filter((t) => t.done === wantDone);
+    sql += " AND done = ?";
+    params.push(req.query.done === "true" ? 1 : 0);
   }
 
   // extra: search by title substring
   if (req.query.search) {
-    const term = req.query.search.toLowerCase();
-    result = result.filter((t) => t.title.toLowerCase().includes(term));
+    sql += " AND title LIKE ?";
+    params.push(`%${req.query.search}%`);
   }
+
+  sql += " ORDER BY id";
 
   // extra: pagination
   if (req.query.limit !== undefined || req.query.offset !== undefined) {
     const offset = parseInt(req.query.offset) || 0;
-    const limit = req.query.limit !== undefined ? parseInt(req.query.limit) : result.length;
-    result = result.slice(offset, offset + limit);
+    const limit = req.query.limit !== undefined ? parseInt(req.query.limit) : -1;
+    sql += " LIMIT ? OFFSET ?";
+    params.push(limit, offset);
   }
 
-  res.json(result);
+  const rows = db.prepare(sql).all(...params);
+  res.json(rows.map(toApiTask));
 });
 
 app.get("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const task = tasks.find((t) => t.id === id);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
   if (!task) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
-  res.json(task);
+  res.json(toApiTask(task));
 });
 
 // ---------- Stage 3: Create ----------
