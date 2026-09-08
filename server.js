@@ -13,15 +13,6 @@ function toApiTask(row) {
   return { id: row.id, title: row.title, done: !!row.done };
 }
 
-// ---------- In-memory "database" ----------
-// (Update/Delete still use this array for now; migrated next.)
-let tasks = [
-  { id: 1, title: "Buy milk", done: false },
-  { id: 2, title: "Write README", done: false },
-  { id: 3, title: "Ship the API", done: true },
-];
-let nextId = 4;
-
 // ---------- Stage 1: root & health ----------
 app.get("/", (req, res) => {
   res.json({
@@ -93,7 +84,7 @@ app.post("/tasks", (req, res) => {
 // ---------- Stage 4: Update & Delete ----------
 app.put("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const task = tasks.find((t) => t.id === id);
+  const task = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
   if (!task) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
@@ -110,37 +101,41 @@ app.put("/tasks/:id", (req, res) => {
     return res.status(400).json({ error: "done must be true or false" });
   }
 
-  if (title !== undefined) task.title = title.trim();
-  if (done !== undefined) task.done = done;
+  const newTitle = title !== undefined ? title.trim() : task.title;
+  const newDone = done !== undefined ? (done ? 1 : 0) : task.done;
+  db.prepare("UPDATE tasks SET title = ?, done = ? WHERE id = ?").run(newTitle, newDone, id);
 
-  res.json(task);
+  const updated = db.prepare("SELECT * FROM tasks WHERE id = ?").get(id);
+  res.json(toApiTask(updated));
 });
 
 app.delete("/tasks/:id", (req, res) => {
   const id = Number(req.params.id);
-  const index = tasks.findIndex((t) => t.id === id);
-  if (index === -1) {
+  const info = db.prepare("DELETE FROM tasks WHERE id = ?").run(id);
+  if (info.changes === 0) {
     return res.status(404).json({ error: `Task ${id} not found` });
   }
-  tasks.splice(index, 1);
   res.status(204).send();
 });
 
 // ---------- Extras ----------
 app.get("/stats", (req, res) => {
-  const total = tasks.length;
-  const done = tasks.filter((t) => t.done).length;
+  // extra: counts via SQL COUNT() instead of counting in JS
+  const { total } = db.prepare("SELECT COUNT(*) AS total FROM tasks").get();
+  const { done } = db.prepare("SELECT COUNT(*) AS done FROM tasks WHERE done = 1").get();
   res.json({ total, done, open: total - done });
 });
 
 app.post("/reset", (req, res) => {
-  tasks = [
-    { id: 1, title: "Buy milk", done: false },
-    { id: 2, title: "Write README", done: false },
-    { id: 3, title: "Ship the API", done: true },
-  ];
-  nextId = 4;
-  res.json({ status: "reset", tasks });
+  db.prepare("DELETE FROM tasks").run();
+  db.prepare("DELETE FROM sqlite_sequence WHERE name = 'tasks'").run();
+  const seed = db.prepare("INSERT INTO tasks (title, done) VALUES (?, ?)");
+  seed.run("Buy milk", 0);
+  seed.run("Write README", 0);
+  seed.run("Ship the API", 1);
+
+  const rows = db.prepare("SELECT * FROM tasks ORDER BY id").all();
+  res.json({ status: "reset", tasks: rows.map(toApiTask) });
 });
 
 // ---------- Stage 5: Swagger UI ----------
