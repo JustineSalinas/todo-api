@@ -14,7 +14,7 @@ function toApiTask(row) {
 }
 
 // ---------- In-memory "database" ----------
-// (Create/Update/Delete still use this array for now; migrated next.)
+// (Update/Delete still use this array for now; migrated next.)
 let tasks = [
   { id: 1, title: "Buy milk", done: false },
   { id: 2, title: "Write README", done: false },
@@ -83,9 +83,11 @@ app.post("/tasks", (req, res) => {
     return res.status(400).json({ error: "title is required and must be a non-empty string" });
   }
 
-  const newTask = { id: nextId++, title: title.trim(), done: false };
-  tasks.push(newTask);
-  res.status(201).json(newTask);
+  const info = db
+    .prepare("INSERT INTO tasks (title, done) VALUES (?, 0)")
+    .run(title.trim());
+  const newTask = db.prepare("SELECT * FROM tasks WHERE id = ?").get(info.lastInsertRowid);
+  res.status(201).json(toApiTask(newTask));
 });
 
 // ---------- Stage 4: Update & Delete ----------
