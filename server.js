@@ -1,13 +1,15 @@
 const express = require("express");
 const swaggerUi = require("swagger-ui-express");
 const openapiSpec = require("./openapi.json");
+require("./db"); // creates tasks.db, the tasks table, and seeds it on first run
 
 const app = express();
-const PORT = 3000;
+const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
 // ---------- In-memory "database" ----------
+// (Still used below; migrated to SQL route by route in the next commits.)
 let tasks = [
   { id: 1, title: "Buy milk", done: false },
   { id: 2, title: "Write README", done: false },
