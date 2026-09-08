@@ -106,13 +106,39 @@ instead of a file next to the code.
 
 ### Proving persistence across a restart
 
-1. `docker compose up`
-2. Create a couple of tasks: `curl -X POST http://localhost:3000/tasks -H "Content-Type: application/json" -d '{"title":"Survive a restart"}'`
-3. `docker compose down` (without `-v`, so the volume stays)
-4. `docker compose up` again
-5. `curl http://localhost:3000/tasks` — the task created in step 2 is still there.
+Actually run, start to finish:
 
-<!-- Fill in with your actual output once you run the steps above. -->
+```
+$ docker compose up -d
+ Container todo-api-db-1  Started
+ Container todo-api-db-1  Healthy
+ Container todo-api-app-1  Started
+
+$ curl -X POST http://localhost:3000/tasks -H "Content-Type: application/json" -d '{"title":"Survive a restart"}'
+{"id":4,"title":"Survive a restart","done":false}
+
+$ docker compose down
+ Container todo-api-app-1  Removed
+ Container todo-api-db-1  Removed
+ Network todo-api_default  Removed
+
+$ docker compose up -d
+ Container todo-api-db-1  Created
+ Container todo-api-app-1  Created
+ Container todo-api-db-1  Healthy
+ Container todo-api-app-1  Started
+
+$ curl http://localhost:3000/tasks
+[{"id":1,"title":"Buy milk","done":false},
+ {"id":2,"title":"Write README","done":false},
+ {"id":3,"title":"Ship the API","done":true},
+ {"id":4,"title":"Survive a restart","done":false}]
+```
+
+`docker compose down` fully removes both containers and the network — this
+isn't a soft restart, it's brand-new containers from scratch. Task 4 is
+still there because it lives in the `pgdata` volume, not in the container
+that got deleted.
 
 ## AI vs me (Stage 7, optional)
 
